@@ -3,17 +3,17 @@
  * Handsontable is a JavaScript library for editable tables with basic copy-paste compatibility with Excel and Google Docs
  *
  * Copyright (c) 2012-2014 Marcin Warpechowski
- * Copyright 2015 Handsoncode sp. z o.o. <hello@handsontable.com>
+ * Copyright 2016 Handsoncode sp. z o.o. <hello@handsontable.com>
  * Licensed under the MIT license.
  * http://handsontable.com/
  *
- * Date: Thu Sep 10 2015 14:56:37 GMT+0200 (CEST)
+ * Date: Mon Feb 22 2016 14:48:39 GMT-0600 (Central Standard Time)
  */
 /*jslint white: true, browser: true, plusplus: true, indent: 4, maxerr: 50 */
 
 window.Handsontable = {
   version: '0.18.0',
-  buildDate: 'Thu Sep 10 2015 14:56:37 GMT+0200 (CEST)'
+  buildDate: 'Mon Feb 22 2016 14:48:39 GMT-0600 (Central Standard Time)'
 };
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.Handsontable = f()}})(function(){var define,module,exports;return (function init(modules, cache, entry) {
   (function outer (modules, cache, entry) {
@@ -65,7 +65,251 @@ window.Handsontable = {
     return Handsontable;
   };
 })
-({1:[function(require,module,exports){
+({"SheetClip":[function(require,module,exports){
+"use strict";
+(function(global) {
+  "use strict";
+  function countQuotes(str) {
+    return str.split('"').length - 1;
+  }
+  var SheetClip = {
+    parse: function(str) {
+      var r,
+          rLen,
+          rows,
+          arr = [],
+          a = 0,
+          c,
+          cLen,
+          multiline,
+          last;
+      rows = str.split('\n');
+      if (rows.length > 1 && rows[rows.length - 1] === '') {
+        rows.pop();
+      }
+      for (r = 0, rLen = rows.length; r < rLen; r += 1) {
+        rows[r] = rows[r].split('\t');
+        for (c = 0, cLen = rows[r].length; c < cLen; c += 1) {
+          if (!arr[a]) {
+            arr[a] = [];
+          }
+          if (multiline && c === 0) {
+            last = arr[a].length - 1;
+            arr[a][last] = arr[a][last] + '\n' + rows[r][0];
+            if (multiline && (countQuotes(rows[r][0]) & 1)) {
+              multiline = false;
+              arr[a][last] = arr[a][last].substring(0, arr[a][last].length - 1).replace(/""/g, '"');
+            }
+          } else {
+            if (c === cLen - 1 && rows[r][c].indexOf('"') === 0 && (countQuotes(rows[r][c]) & 1)) {
+              arr[a].push(rows[r][c].substring(1).replace(/""/g, '"'));
+              multiline = true;
+            } else {
+              arr[a].push(rows[r][c].replace(/""/g, '"'));
+              multiline = false;
+            }
+          }
+        }
+        if (!multiline) {
+          a += 1;
+        }
+      }
+      return arr;
+    },
+    stringify: function(arr) {
+      var r,
+          rLen,
+          c,
+          cLen,
+          str = '',
+          val;
+      for (r = 0, rLen = arr.length; r < rLen; r += 1) {
+        cLen = arr[r].length;
+        for (c = 0; c < cLen; c += 1) {
+          if (c > 0) {
+            str += '\t';
+          }
+          val = arr[r][c];
+          if (typeof val === 'string') {
+            if (val.indexOf('\n') > -1) {
+              str += '"' + val.replace(/"/g, '""') + '"';
+            } else {
+              str += val;
+            }
+          } else if (val === null || val === void 0) {
+            str += '';
+          } else {
+            str += val;
+          }
+        }
+        str += '\n';
+      }
+      return str;
+    }
+  };
+  if (typeof exports !== 'undefined') {
+    exports.parse = SheetClip.parse;
+    exports.stringify = SheetClip.stringify;
+  } else {
+    global.SheetClip = SheetClip;
+  }
+}(window));
+
+//# 
+},{}],"autoResize":[function(require,module,exports){
+"use strict";
+function autoResize() {
+  var defaults = {
+    minHeight: 200,
+    maxHeight: 300,
+    minWidth: 100,
+    maxWidth: 300
+  },
+      el,
+      body = document.body,
+      text = document.createTextNode(''),
+      span = document.createElement('SPAN'),
+      observe = function(element, event, handler) {
+        if (window.attachEvent) {
+          element.attachEvent('on' + event, handler);
+        } else {
+          element.addEventListener(event, handler, false);
+        }
+      },
+      unObserve = function(element, event, handler) {
+        if (window.removeEventListener) {
+          element.removeEventListener(event, handler, false);
+        } else {
+          element.detachEvent('on' + event, handler);
+        }
+      },
+      resize = function(newChar) {
+        var width,
+            scrollHeight;
+        if (!newChar) {
+          newChar = "";
+        } else if (!/^[a-zA-Z \.,\\\/\|0-9]$/.test(newChar)) {
+          newChar = ".";
+        }
+        if (text.textContent !== void 0) {
+          text.textContent = el.value + newChar;
+        } else {
+          text.data = el.value + newChar;
+        }
+        span.style.fontSize = Handsontable.Dom.getComputedStyle(el).fontSize;
+        span.style.fontFamily = Handsontable.Dom.getComputedStyle(el).fontFamily;
+        span.style.whiteSpace = "pre";
+        body.appendChild(span);
+        width = span.clientWidth + 2;
+        body.removeChild(span);
+        el.style.height = defaults.minHeight + 'px';
+        if (defaults.minWidth > width) {
+          el.style.width = defaults.minWidth + 'px';
+        } else if (width > defaults.maxWidth) {
+          el.style.width = defaults.maxWidth + 'px';
+        } else {
+          el.style.width = width + 'px';
+        }
+        scrollHeight = el.scrollHeight ? el.scrollHeight - 1 : 0;
+        if (defaults.minHeight > scrollHeight) {
+          el.style.height = defaults.minHeight + 'px';
+        } else if (defaults.maxHeight < scrollHeight) {
+          el.style.height = defaults.maxHeight + 'px';
+          el.style.overflowY = 'visible';
+        } else {
+          el.style.height = scrollHeight + 'px';
+        }
+      },
+      delayedResize = function() {
+        window.setTimeout(resize, 0);
+      },
+      extendDefaults = function(config) {
+        if (config && config.minHeight) {
+          if (config.minHeight == 'inherit') {
+            defaults.minHeight = el.clientHeight;
+          } else {
+            var minHeight = parseInt(config.minHeight);
+            if (!isNaN(minHeight)) {
+              defaults.minHeight = minHeight;
+            }
+          }
+        }
+        if (config && config.maxHeight) {
+          if (config.maxHeight == 'inherit') {
+            defaults.maxHeight = el.clientHeight;
+          } else {
+            var maxHeight = parseInt(config.maxHeight);
+            if (!isNaN(maxHeight)) {
+              defaults.maxHeight = maxHeight;
+            }
+          }
+        }
+        if (config && config.minWidth) {
+          if (config.minWidth == 'inherit') {
+            defaults.minWidth = el.clientWidth;
+          } else {
+            var minWidth = parseInt(config.minWidth);
+            if (!isNaN(minWidth)) {
+              defaults.minWidth = minWidth;
+            }
+          }
+        }
+        if (config && config.maxWidth) {
+          if (config.maxWidth == 'inherit') {
+            defaults.maxWidth = el.clientWidth;
+          } else {
+            var maxWidth = parseInt(config.maxWidth);
+            if (!isNaN(maxWidth)) {
+              defaults.maxWidth = maxWidth;
+            }
+          }
+        }
+        if (!span.firstChild) {
+          span.className = "autoResize";
+          span.style.display = 'inline-block';
+          span.appendChild(text);
+        }
+      },
+      init = function(el_, config, doObserve) {
+        el = el_;
+        extendDefaults(config);
+        if (el.nodeName == 'TEXTAREA') {
+          el.style.resize = 'none';
+          el.style.overflowY = '';
+          el.style.height = defaults.minHeight + 'px';
+          el.style.minWidth = defaults.minWidth + 'px';
+          el.style.maxWidth = defaults.maxWidth + 'px';
+          el.style.overflowY = 'hidden';
+        }
+        if (doObserve) {
+          observe(el, 'change', resize);
+          observe(el, 'cut', delayedResize);
+          observe(el, 'paste', delayedResize);
+          observe(el, 'drop', delayedResize);
+          observe(el, 'keydown', delayedResize);
+        }
+        resize();
+      };
+  return {
+    init: function(el_, config, doObserve) {
+      init(el_, config, doObserve);
+    },
+    unObserve: function() {
+      unObserve(el, 'change', resize);
+      unObserve(el, 'cut', delayedResize);
+      unObserve(el, 'paste', delayedResize);
+      unObserve(el, 'drop', delayedResize);
+      unObserve(el, 'keydown', delayedResize);
+    },
+    resize: resize
+  };
+}
+if (typeof exports !== 'undefined') {
+  module.exports = autoResize;
+}
+
+//# 
+},{}],1:[function(require,module,exports){
 "use strict";
 if (window.jQuery) {
   (function(window, $, Handsontable) {
@@ -9283,16 +9527,18 @@ function duckSchema(object) {
   } else {
     schema = {};
     objectEach(object, function(value, key) {
-      if (value && typeof value === 'object' && !Array.isArray(value)) {
-        schema[key] = duckSchema(value);
-      } else if (Array.isArray(value)) {
-        if (value.length && typeof value[0] === 'object' && !Array.isArray(value[0])) {
-          schema[key] = [duckSchema(value[0])];
+      if (key !== "entityAspect" && key !== "_backingStore") {
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          schema[key] = duckSchema(value);
+        } else if (Array.isArray(value)) {
+          if (value.length && typeof value[0] === 'object' && !Array.isArray(value[0])) {
+            schema[key] = [duckSchema(value[0])];
+          } else {
+            schema[key] = [];
+          }
         } else {
-          schema[key] = [];
+          schema[key] = null;
         }
-      } else {
-        schema[key] = null;
       }
     });
   }
@@ -11485,6 +11731,142 @@ registerPlugin('comments', Comments);
 },{"3rdparty/walkontable/src/cell/coords":5,"_base":56,"commentEditor":61,"eventManager":40,"helpers/dom/element":44,"plugins":55}],63:[function(require,module,exports){
 "use strict";
 Object.defineProperties(exports, {
+  ContextMenuCopyPaste: {get: function() {
+      return ContextMenuCopyPaste;
+    }},
+  __esModule: {value: true}
+});
+var $___46__46__47__46__46__47_helpers_47_dom_47_element__,
+    $___46__46__47__46__46__47_eventManager__,
+    $___46__46__47__46__46__47_plugins__,
+    $___46__46__47__95_base__,
+    $__zeroclipboard__;
+var removeClass = ($___46__46__47__46__46__47_helpers_47_dom_47_element__ = require("helpers/dom/element"), $___46__46__47__46__46__47_helpers_47_dom_47_element__ && $___46__46__47__46__46__47_helpers_47_dom_47_element__.__esModule && $___46__46__47__46__46__47_helpers_47_dom_47_element__ || {default: $___46__46__47__46__46__47_helpers_47_dom_47_element__}).removeClass;
+var eventManagerObject = ($___46__46__47__46__46__47_eventManager__ = require("eventManager"), $___46__46__47__46__46__47_eventManager__ && $___46__46__47__46__46__47_eventManager__.__esModule && $___46__46__47__46__46__47_eventManager__ || {default: $___46__46__47__46__46__47_eventManager__}).eventManager;
+var registerPlugin = ($___46__46__47__46__46__47_plugins__ = require("plugins"), $___46__46__47__46__46__47_plugins__ && $___46__46__47__46__46__47_plugins__.__esModule && $___46__46__47__46__46__47_plugins__ || {default: $___46__46__47__46__46__47_plugins__}).registerPlugin;
+var BasePlugin = ($___46__46__47__95_base__ = require("_base"), $___46__46__47__95_base__ && $___46__46__47__95_base__.__esModule && $___46__46__47__95_base__ || {default: $___46__46__47__95_base__}).default;
+var ZeroClipboard = ($__zeroclipboard__ = require("zeroclipboard"), $__zeroclipboard__ && $__zeroclipboard__.__esModule && $__zeroclipboard__ || {default: $__zeroclipboard__}).default;
+var ContextMenuCopyPaste = function ContextMenuCopyPaste(hotInstance) {
+  var $__5 = this;
+  $traceurRuntime.superConstructor($ContextMenuCopyPaste).call(this, hotInstance);
+  this.swfPath = null;
+  this.hotContextMenu = null;
+  this.outsideClickDeselectsCache = null;
+  this.hot.addHook('afterContextMenuShow', (function(htContextMenu) {
+    return $__5.setupZeroClipboard(htContextMenu);
+  }));
+  this.hot.addHook('afterInit', (function() {
+    return $__5.afterInit();
+  }));
+  this.hot.addHook('afterContextMenuDefaultOptions', (function(options) {
+    return $__5.addToContextMenu(options);
+  }));
+};
+var $ContextMenuCopyPaste = ContextMenuCopyPaste;
+($traceurRuntime.createClass)(ContextMenuCopyPaste, {
+  afterInit: function() {
+    if (!this.hot.getSettings().contextMenuCopyPaste) {
+      return;
+    } else if (typeof this.hot.getSettings().contextMenuCopyPaste == 'object') {
+      this.swfPath = this.hot.getSettings().contextMenuCopyPaste.swfPath;
+    }
+    if (typeof ZeroClipboard === 'undefined') {
+      console.error('To be able to use the Copy/Paste feature from the context menu, you need to manualy include ZeroClipboard.js file to your website.');
+    }
+    try {
+      new ActiveXObject('ShockwaveFlash.ShockwaveFlash');
+    } catch (exception) {
+      if ('undefined' == typeof navigator.mimeTypes['application/x-shockwave-flash']) {
+        console.error('To be able to use the Copy/Paste feature from the context menu, your browser needs to have Flash Plugin installed.');
+      }
+    }
+    this.prepareZeroClipboard();
+  },
+  prepareZeroClipboard: function() {
+    if (this.swfPath) {
+      ZeroClipboard.config({swfPath: this.swfPath});
+    }
+  },
+  getCopyValue: function() {
+    this.hot.copyPaste.setCopyableText();
+    return this.hot.copyPaste.copyPasteInstance.elTextarea.value;
+  },
+  addToContextMenu: function(defaultOptions) {
+    if (!this.hot.getSettings().contextMenuCopyPaste) {
+      return;
+    }
+    defaultOptions.items.unshift({
+      key: 'copy',
+      name: 'Copy'
+    }, {
+      key: 'paste',
+      name: 'Paste',
+      callback: function() {
+        this.copyPaste.triggerPaste();
+      }
+    }, Handsontable.plugins.ContextMenu.SEPARATOR);
+  },
+  setupZeroClipboard: function(hotContextMenu) {
+    var $__5 = this;
+    var data,
+        zeroClipboardInstance;
+    if (!this.hot.getSettings().contextMenuCopyPaste) {
+      return;
+    }
+    this.hotContextMenu = hotContextMenu;
+    data = this.hotContextMenu.getData();
+    for (var i = 0,
+        ilen = data.length; i < ilen; i++) {
+      if (data[i].key === 'copy') {
+        zeroClipboardInstance = new ZeroClipboard(this.hotContextMenu.getCell(i, 0));
+        zeroClipboardInstance.off();
+        zeroClipboardInstance.on('copy', (function(event) {
+          var clipboard = event.clipboardData;
+          clipboard.setData('text/plain', $__5.getCopyValue());
+          $__5.hot.getSettings().outsideClickDeselects = $__5.outsideClickDeselectsCache;
+        }));
+        this.bindEvents();
+        break;
+      }
+    }
+  },
+  removeCurrentClass: function() {
+    if (this.hotContextMenu.rootElement) {
+      var element = this.hotContextMenu.rootElement.querySelector('td.current');
+      if (element) {
+        removeClass(element, 'current');
+      }
+    }
+    this.outsideClickDeselectsCache = this.hot.getSettings().outsideClickDeselects;
+    this.hot.getSettings().outsideClickDeselects = false;
+  },
+  removeZeroClipboardClass: function() {
+    if (this.hotContextMenu.rootElement) {
+      var element = this.hotContextMenu.rootElement.querySelector('td.zeroclipboard-is-hover');
+      if (element) {
+        removeClass(element, 'zeroclipboard-is-hover');
+      }
+    }
+    this.hot.getSettings().outsideClickDeselects = this.outsideClickDeselectsCache;
+  },
+  bindEvents: function() {
+    var $__5 = this;
+    var eventManager = eventManagerObject(this.hotContextMenu);
+    eventManager.addEventListener(document, 'mouseenter', (function() {
+      return $__5.removeCurrentClass();
+    }));
+    eventManager.addEventListener(document, 'mouseleave', (function() {
+      return $__5.removeZeroClipboardClass();
+    }));
+  }
+}, {}, BasePlugin);
+;
+registerPlugin('contextMenuCopyPaste', ContextMenuCopyPaste);
+
+//# 
+},{"_base":56,"eventManager":40,"helpers/dom/element":44,"plugins":55,"zeroclipboard":undefined}],64:[function(require,module,exports){
+"use strict";
+Object.defineProperties(exports, {
   CommandExecutor: {get: function() {
       return CommandExecutor;
     }},
@@ -11555,7 +11937,7 @@ function findSubCommand(subCommandName, subCommands) {
 ;
 
 //# 
-},{"helpers/array":41}],64:[function(require,module,exports){
+},{"helpers/array":41}],65:[function(require,module,exports){
 "use strict";
 Object.defineProperties(exports, {
   ContextMenu: {get: function() {
@@ -11723,7 +12105,7 @@ Handsontable.plugins = Handsontable.plugins || {};
 Handsontable.plugins.ContextMenu = ContextMenu;
 
 //# 
-},{"_base":56,"commandExecutor":63,"eventManager":40,"helpers/array":41,"helpers/dom/element":44,"helpers/dom/event":45,"helpers/object":49,"itemsFactory":66,"menu":67,"plugins":55,"predefinedItems":68}],65:[function(require,module,exports){
+},{"_base":56,"commandExecutor":64,"eventManager":40,"helpers/array":41,"helpers/dom/element":44,"helpers/dom/event":45,"helpers/object":49,"itemsFactory":67,"menu":68,"plugins":55,"predefinedItems":69}],66:[function(require,module,exports){
 "use strict";
 Object.defineProperties(exports, {
   Cursor: {get: function() {
@@ -11803,7 +12185,7 @@ Handsontable.plugins.utils = Handsontable.plugins.utils || {};
 Handsontable.plugins.utils.Cursor = Cursor;
 
 //# 
-},{"helpers/dom/element":44,"helpers/dom/event":45}],66:[function(require,module,exports){
+},{"helpers/dom/element":44,"helpers/dom/event":45}],67:[function(require,module,exports){
 "use strict";
 Object.defineProperties(exports, {
   ItemsFactory: {get: function() {
@@ -11922,7 +12304,7 @@ function getItems() {
 ;
 
 //# 
-},{"helpers/array":41,"helpers/object":49,"predefinedItems":68}],67:[function(require,module,exports){
+},{"helpers/array":41,"helpers/object":49,"predefinedItems":69}],68:[function(require,module,exports){
 "use strict";
 Object.defineProperties(exports, {
   Menu: {get: function() {
@@ -12331,7 +12713,7 @@ var $Menu = Menu;
 ;
 
 //# 
-},{"cursor":65,"eventManager":40,"helpers/array":41,"helpers/dom/element":44,"helpers/dom/event":45,"helpers/object":49,"helpers/unicode":52,"predefinedItems":68,"utils":69}],68:[function(require,module,exports){
+},{"cursor":66,"eventManager":40,"helpers/array":41,"helpers/dom/element":44,"helpers/dom/event":45,"helpers/object":49,"helpers/unicode":52,"predefinedItems":69,"utils":70}],69:[function(require,module,exports){
 "use strict";
 var $__4;
 Object.defineProperties(exports, {
@@ -12881,7 +13263,7 @@ var _predefinedItems = ($__4 = {}, Object.defineProperty($__4, SEPARATOR, {
 }), $__4);
 
 //# 
-},{"helpers/number":48,"helpers/object":49,"utils":69}],69:[function(require,module,exports){
+},{"helpers/number":48,"helpers/object":49,"utils":70}],70:[function(require,module,exports){
 "use strict";
 Object.defineProperties(exports, {
   normalizeSelection: {get: function() {
@@ -13017,143 +13399,7 @@ function markLabelAsSelected(label) {
 }
 
 //# 
-},{"helpers/dom/element":44}],70:[function(require,module,exports){
-"use strict";
-Object.defineProperties(exports, {
-  ContextMenuCopyPaste: {get: function() {
-      return ContextMenuCopyPaste;
-    }},
-  __esModule: {value: true}
-});
-var $___46__46__47__46__46__47_helpers_47_dom_47_element__,
-    $___46__46__47__46__46__47_eventManager__,
-    $___46__46__47__46__46__47_plugins__,
-    $___46__46__47__95_base__,
-    $__zeroclipboard__;
-var removeClass = ($___46__46__47__46__46__47_helpers_47_dom_47_element__ = require("helpers/dom/element"), $___46__46__47__46__46__47_helpers_47_dom_47_element__ && $___46__46__47__46__46__47_helpers_47_dom_47_element__.__esModule && $___46__46__47__46__46__47_helpers_47_dom_47_element__ || {default: $___46__46__47__46__46__47_helpers_47_dom_47_element__}).removeClass;
-var eventManagerObject = ($___46__46__47__46__46__47_eventManager__ = require("eventManager"), $___46__46__47__46__46__47_eventManager__ && $___46__46__47__46__46__47_eventManager__.__esModule && $___46__46__47__46__46__47_eventManager__ || {default: $___46__46__47__46__46__47_eventManager__}).eventManager;
-var registerPlugin = ($___46__46__47__46__46__47_plugins__ = require("plugins"), $___46__46__47__46__46__47_plugins__ && $___46__46__47__46__46__47_plugins__.__esModule && $___46__46__47__46__46__47_plugins__ || {default: $___46__46__47__46__46__47_plugins__}).registerPlugin;
-var BasePlugin = ($___46__46__47__95_base__ = require("_base"), $___46__46__47__95_base__ && $___46__46__47__95_base__.__esModule && $___46__46__47__95_base__ || {default: $___46__46__47__95_base__}).default;
-var ZeroClipboard = ($__zeroclipboard__ = require("zeroclipboard"), $__zeroclipboard__ && $__zeroclipboard__.__esModule && $__zeroclipboard__ || {default: $__zeroclipboard__}).default;
-var ContextMenuCopyPaste = function ContextMenuCopyPaste(hotInstance) {
-  var $__5 = this;
-  $traceurRuntime.superConstructor($ContextMenuCopyPaste).call(this, hotInstance);
-  this.swfPath = null;
-  this.hotContextMenu = null;
-  this.outsideClickDeselectsCache = null;
-  this.hot.addHook('afterContextMenuShow', (function(htContextMenu) {
-    return $__5.setupZeroClipboard(htContextMenu);
-  }));
-  this.hot.addHook('afterInit', (function() {
-    return $__5.afterInit();
-  }));
-  this.hot.addHook('afterContextMenuDefaultOptions', (function(options) {
-    return $__5.addToContextMenu(options);
-  }));
-};
-var $ContextMenuCopyPaste = ContextMenuCopyPaste;
-($traceurRuntime.createClass)(ContextMenuCopyPaste, {
-  afterInit: function() {
-    if (!this.hot.getSettings().contextMenuCopyPaste) {
-      return;
-    } else if (typeof this.hot.getSettings().contextMenuCopyPaste == 'object') {
-      this.swfPath = this.hot.getSettings().contextMenuCopyPaste.swfPath;
-    }
-    if (typeof ZeroClipboard === 'undefined') {
-      console.error('To be able to use the Copy/Paste feature from the context menu, you need to manualy include ZeroClipboard.js file to your website.');
-    }
-    try {
-      new ActiveXObject('ShockwaveFlash.ShockwaveFlash');
-    } catch (exception) {
-      if ('undefined' == typeof navigator.mimeTypes['application/x-shockwave-flash']) {
-        console.error('To be able to use the Copy/Paste feature from the context menu, your browser needs to have Flash Plugin installed.');
-      }
-    }
-    this.prepareZeroClipboard();
-  },
-  prepareZeroClipboard: function() {
-    if (this.swfPath) {
-      ZeroClipboard.config({swfPath: this.swfPath});
-    }
-  },
-  getCopyValue: function() {
-    this.hot.copyPaste.setCopyableText();
-    return this.hot.copyPaste.copyPasteInstance.elTextarea.value;
-  },
-  addToContextMenu: function(defaultOptions) {
-    if (!this.hot.getSettings().contextMenuCopyPaste) {
-      return;
-    }
-    defaultOptions.items.unshift({
-      key: 'copy',
-      name: 'Copy'
-    }, {
-      key: 'paste',
-      name: 'Paste',
-      callback: function() {
-        this.copyPaste.triggerPaste();
-      }
-    }, Handsontable.plugins.ContextMenu.SEPARATOR);
-  },
-  setupZeroClipboard: function(hotContextMenu) {
-    var $__5 = this;
-    var data,
-        zeroClipboardInstance;
-    if (!this.hot.getSettings().contextMenuCopyPaste) {
-      return;
-    }
-    this.hotContextMenu = hotContextMenu;
-    data = this.hotContextMenu.getData();
-    for (var i = 0,
-        ilen = data.length; i < ilen; i++) {
-      if (data[i].key === 'copy') {
-        zeroClipboardInstance = new ZeroClipboard(this.hotContextMenu.getCell(i, 0));
-        zeroClipboardInstance.off();
-        zeroClipboardInstance.on('copy', (function(event) {
-          var clipboard = event.clipboardData;
-          clipboard.setData('text/plain', $__5.getCopyValue());
-          $__5.hot.getSettings().outsideClickDeselects = $__5.outsideClickDeselectsCache;
-        }));
-        this.bindEvents();
-        break;
-      }
-    }
-  },
-  removeCurrentClass: function() {
-    if (this.hotContextMenu.rootElement) {
-      var element = this.hotContextMenu.rootElement.querySelector('td.current');
-      if (element) {
-        removeClass(element, 'current');
-      }
-    }
-    this.outsideClickDeselectsCache = this.hot.getSettings().outsideClickDeselects;
-    this.hot.getSettings().outsideClickDeselects = false;
-  },
-  removeZeroClipboardClass: function() {
-    if (this.hotContextMenu.rootElement) {
-      var element = this.hotContextMenu.rootElement.querySelector('td.zeroclipboard-is-hover');
-      if (element) {
-        removeClass(element, 'zeroclipboard-is-hover');
-      }
-    }
-    this.hot.getSettings().outsideClickDeselects = this.outsideClickDeselectsCache;
-  },
-  bindEvents: function() {
-    var $__5 = this;
-    var eventManager = eventManagerObject(this.hotContextMenu);
-    eventManager.addEventListener(document, 'mouseenter', (function() {
-      return $__5.removeCurrentClass();
-    }));
-    eventManager.addEventListener(document, 'mouseleave', (function() {
-      return $__5.removeZeroClipboardClass();
-    }));
-  }
-}, {}, BasePlugin);
-;
-registerPlugin('contextMenuCopyPaste', ContextMenuCopyPaste);
-
-//# 
-},{"_base":56,"eventManager":40,"helpers/dom/element":44,"plugins":55,"zeroclipboard":undefined}],71:[function(require,module,exports){
+},{"helpers/dom/element":44}],71:[function(require,module,exports){
 "use strict";
 Object.defineProperties(exports, {
   CopyPastePlugin: {get: function() {
@@ -19214,250 +19460,6 @@ Handsontable.NumericValidator = function(value, callback) {
 };
 
 //# 
-},{}],"SheetClip":[function(require,module,exports){
-"use strict";
-(function(global) {
-  "use strict";
-  function countQuotes(str) {
-    return str.split('"').length - 1;
-  }
-  var SheetClip = {
-    parse: function(str) {
-      var r,
-          rLen,
-          rows,
-          arr = [],
-          a = 0,
-          c,
-          cLen,
-          multiline,
-          last;
-      rows = str.split('\n');
-      if (rows.length > 1 && rows[rows.length - 1] === '') {
-        rows.pop();
-      }
-      for (r = 0, rLen = rows.length; r < rLen; r += 1) {
-        rows[r] = rows[r].split('\t');
-        for (c = 0, cLen = rows[r].length; c < cLen; c += 1) {
-          if (!arr[a]) {
-            arr[a] = [];
-          }
-          if (multiline && c === 0) {
-            last = arr[a].length - 1;
-            arr[a][last] = arr[a][last] + '\n' + rows[r][0];
-            if (multiline && (countQuotes(rows[r][0]) & 1)) {
-              multiline = false;
-              arr[a][last] = arr[a][last].substring(0, arr[a][last].length - 1).replace(/""/g, '"');
-            }
-          } else {
-            if (c === cLen - 1 && rows[r][c].indexOf('"') === 0 && (countQuotes(rows[r][c]) & 1)) {
-              arr[a].push(rows[r][c].substring(1).replace(/""/g, '"'));
-              multiline = true;
-            } else {
-              arr[a].push(rows[r][c].replace(/""/g, '"'));
-              multiline = false;
-            }
-          }
-        }
-        if (!multiline) {
-          a += 1;
-        }
-      }
-      return arr;
-    },
-    stringify: function(arr) {
-      var r,
-          rLen,
-          c,
-          cLen,
-          str = '',
-          val;
-      for (r = 0, rLen = arr.length; r < rLen; r += 1) {
-        cLen = arr[r].length;
-        for (c = 0; c < cLen; c += 1) {
-          if (c > 0) {
-            str += '\t';
-          }
-          val = arr[r][c];
-          if (typeof val === 'string') {
-            if (val.indexOf('\n') > -1) {
-              str += '"' + val.replace(/"/g, '""') + '"';
-            } else {
-              str += val;
-            }
-          } else if (val === null || val === void 0) {
-            str += '';
-          } else {
-            str += val;
-          }
-        }
-        str += '\n';
-      }
-      return str;
-    }
-  };
-  if (typeof exports !== 'undefined') {
-    exports.parse = SheetClip.parse;
-    exports.stringify = SheetClip.stringify;
-  } else {
-    global.SheetClip = SheetClip;
-  }
-}(window));
-
-//# 
-},{}],"autoResize":[function(require,module,exports){
-"use strict";
-function autoResize() {
-  var defaults = {
-    minHeight: 200,
-    maxHeight: 300,
-    minWidth: 100,
-    maxWidth: 300
-  },
-      el,
-      body = document.body,
-      text = document.createTextNode(''),
-      span = document.createElement('SPAN'),
-      observe = function(element, event, handler) {
-        if (window.attachEvent) {
-          element.attachEvent('on' + event, handler);
-        } else {
-          element.addEventListener(event, handler, false);
-        }
-      },
-      unObserve = function(element, event, handler) {
-        if (window.removeEventListener) {
-          element.removeEventListener(event, handler, false);
-        } else {
-          element.detachEvent('on' + event, handler);
-        }
-      },
-      resize = function(newChar) {
-        var width,
-            scrollHeight;
-        if (!newChar) {
-          newChar = "";
-        } else if (!/^[a-zA-Z \.,\\\/\|0-9]$/.test(newChar)) {
-          newChar = ".";
-        }
-        if (text.textContent !== void 0) {
-          text.textContent = el.value + newChar;
-        } else {
-          text.data = el.value + newChar;
-        }
-        span.style.fontSize = Handsontable.Dom.getComputedStyle(el).fontSize;
-        span.style.fontFamily = Handsontable.Dom.getComputedStyle(el).fontFamily;
-        span.style.whiteSpace = "pre";
-        body.appendChild(span);
-        width = span.clientWidth + 2;
-        body.removeChild(span);
-        el.style.height = defaults.minHeight + 'px';
-        if (defaults.minWidth > width) {
-          el.style.width = defaults.minWidth + 'px';
-        } else if (width > defaults.maxWidth) {
-          el.style.width = defaults.maxWidth + 'px';
-        } else {
-          el.style.width = width + 'px';
-        }
-        scrollHeight = el.scrollHeight ? el.scrollHeight - 1 : 0;
-        if (defaults.minHeight > scrollHeight) {
-          el.style.height = defaults.minHeight + 'px';
-        } else if (defaults.maxHeight < scrollHeight) {
-          el.style.height = defaults.maxHeight + 'px';
-          el.style.overflowY = 'visible';
-        } else {
-          el.style.height = scrollHeight + 'px';
-        }
-      },
-      delayedResize = function() {
-        window.setTimeout(resize, 0);
-      },
-      extendDefaults = function(config) {
-        if (config && config.minHeight) {
-          if (config.minHeight == 'inherit') {
-            defaults.minHeight = el.clientHeight;
-          } else {
-            var minHeight = parseInt(config.minHeight);
-            if (!isNaN(minHeight)) {
-              defaults.minHeight = minHeight;
-            }
-          }
-        }
-        if (config && config.maxHeight) {
-          if (config.maxHeight == 'inherit') {
-            defaults.maxHeight = el.clientHeight;
-          } else {
-            var maxHeight = parseInt(config.maxHeight);
-            if (!isNaN(maxHeight)) {
-              defaults.maxHeight = maxHeight;
-            }
-          }
-        }
-        if (config && config.minWidth) {
-          if (config.minWidth == 'inherit') {
-            defaults.minWidth = el.clientWidth;
-          } else {
-            var minWidth = parseInt(config.minWidth);
-            if (!isNaN(minWidth)) {
-              defaults.minWidth = minWidth;
-            }
-          }
-        }
-        if (config && config.maxWidth) {
-          if (config.maxWidth == 'inherit') {
-            defaults.maxWidth = el.clientWidth;
-          } else {
-            var maxWidth = parseInt(config.maxWidth);
-            if (!isNaN(maxWidth)) {
-              defaults.maxWidth = maxWidth;
-            }
-          }
-        }
-        if (!span.firstChild) {
-          span.className = "autoResize";
-          span.style.display = 'inline-block';
-          span.appendChild(text);
-        }
-      },
-      init = function(el_, config, doObserve) {
-        el = el_;
-        extendDefaults(config);
-        if (el.nodeName == 'TEXTAREA') {
-          el.style.resize = 'none';
-          el.style.overflowY = '';
-          el.style.height = defaults.minHeight + 'px';
-          el.style.minWidth = defaults.minWidth + 'px';
-          el.style.maxWidth = defaults.maxWidth + 'px';
-          el.style.overflowY = 'hidden';
-        }
-        if (doObserve) {
-          observe(el, 'change', resize);
-          observe(el, 'cut', delayedResize);
-          observe(el, 'paste', delayedResize);
-          observe(el, 'drop', delayedResize);
-          observe(el, 'keydown', delayedResize);
-        }
-        resize();
-      };
-  return {
-    init: function(el_, config, doObserve) {
-      init(el_, config, doObserve);
-    },
-    unObserve: function() {
-      unObserve(el, 'change', resize);
-      unObserve(el, 'cut', delayedResize);
-      unObserve(el, 'paste', delayedResize);
-      unObserve(el, 'drop', delayedResize);
-      unObserve(el, 'keydown', delayedResize);
-    },
-    resize: resize
-  };
-}
-if (typeof exports !== 'undefined') {
-  module.exports = autoResize;
-}
-
-//# 
 },{}],"copyPaste":[function(require,module,exports){
 "use strict";
 var instance;
@@ -20805,5 +20807,5 @@ if (typeof exports !== "undefined") {
 }).call(window);
 
 //# 
-},{}]},{},[23,57,58,59,60,82,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,83,84,85,86,99,100,101,89,90,91,92,93,94,30,34,31,32,39,33,35,36,37,38])("numeral")
+},{}]},{},[23,57,59,58,60,82,61,62,64,65,66,67,68,69,70,63,71,72,73,74,75,76,77,78,79,80,81,83,84,85,86,99,100,101,89,90,91,92,93,94,30,34,31,32,39,33,35,36,37,38])("numeral")
 });

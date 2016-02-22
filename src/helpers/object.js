@@ -14,18 +14,20 @@ export function duckSchema(object) {
     schema = {};
 
     objectEach(object, function(value, key) {
-      if (value && typeof value === 'object' && !Array.isArray(value)) {
-        schema[key] = duckSchema(value);
-
-      } else if (Array.isArray(value)) {
-        if (value.length && typeof value[0] === 'object' && !Array.isArray(value[0])) {
-          schema[key] = [duckSchema(value[0])];
+      if ( key !== "entityAspect" && key !== "_backingStore"){
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          schema[key] = duckSchema(value);
+  
+        } else if (Array.isArray(value)) {
+          if (value.length && typeof value[0] === 'object' && !Array.isArray(value[0])) {
+            schema[key] = [duckSchema(value[0])];
+          } else {
+            schema[key] = [];
+          }
+  
         } else {
-          schema[key] = [];
+          schema[key] = null;
         }
-
-      } else {
-        schema[key] = null;
       }
     });
   }
